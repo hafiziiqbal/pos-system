@@ -18,7 +18,8 @@ return new class extends Migration
             $table->string('branch_code')->unique();
             $table->text('address');
             $table->string('timezone')->default('+07:00');
-            $table->string('currency')->default('rupiah');
+            $table->string('currency')->default('IDR');
+            $table->tinyInteger('disabled')->default(0);
             $table->timestamps();
         });
     }

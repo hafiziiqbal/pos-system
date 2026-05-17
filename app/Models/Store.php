@@ -13,5 +13,6 @@ class Store extends Model
         'address',
         'timezone',
         'currency',
+        'disabled',
     ];
 }

@@ -64,6 +64,7 @@
     <script src="{{ asset('vendor/axios/axios.min.js') }}"></script>
     <script src="{{ asset('vendor/alpine/cdn.min.js') }}" defer></script>
     <script src="{{ asset('vendor/sweetalert/sweetalert2@11.map.js') }}" defer></script>
+    <script src="{{ asset('vendor/jquery/3.7.1/jquery.min.js') }}"></script>
 </head>
 
 <body>
@@ -166,9 +167,9 @@
                             <a href="{{ route('store') }}" @class([
                                 'block px-3 py-1.5 text-sm rounded-md transition-colors',
                                 'font-bold text-slate-900 bg-slate-100 shadow-sm' => request()->routeIs(
-                                    'store'),
+                                    'store*'),
                                 'text-slate-500 hover:text-slate-900 hover:bg-slate-50' => !request()->routeIs(
-                                    'store'),
+                                    'store*'),
                             ])>
                                 Toko
                             </a>

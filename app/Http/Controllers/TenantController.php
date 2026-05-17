@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class TenantController extends Controller
 {
@@ -13,86 +14,107 @@ class TenantController extends Controller
         return view('admin.tenant.index');
     }
 
+    /**
+     * Mengambil data untuk Server-side DataTables dengan Cache terfragmentasi per request parameter.
+     */
     public function getDatatable(Request $request)
     {
         $draw   = $request->input('draw');
         $start  = $request->input('start', 0);
         $length = $request->input('length', 10);
 
-        // 1. Ubah indeks ke-4 dari 'status' menjadi 'disabled' sesuai nama kolom database
         $columns = [
-            0  => null, // No (row number)
+            0  => null,
             1  => 'name',
             2  => 'subdomain',
             3  => 'plan',
-            4  => 'disabled', // ✅ Diubah dari 'status' menjadi 'disabled'
+            4  => 'disabled',
             5  => 'created_at',
-            6  => null, // Action
+            6  => null,
         ];
 
-        $query = DB::table('tenants');
+        // 2. ✅ MEMBUAT CACHE KEY UNIK BERDASARKAN PARAMETER REQUEST
+        // Ini agar pencarian/pagination user A tidak bertabrakan dengan user B
+        $cacheKey = 'tenants_dt_' . md5(json_encode($request->all()));
 
-        $totalRecords = DB::table('tenants')->count();
+        // Jika cache dengan key tersebut ada, ambil. Jika tidak, jalankan query dan simpan selama 10 menit.
+        $response = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($start, $length, $columns, $request) {
 
-        // ✅ Filter per kolom
-        $columnSearches = $request->input('columns', []);
-        foreach ($columnSearches as $index => $columnData) {
-            $searchValue = $columnData['search']['value'] ?? '';
-            if (empty($searchValue) && $searchValue !== '0') { // Pastikan angka '0' tidak dianggap empty
-                continue;
-            }
+            $query = DB::table('tenants');
+            $totalRecords = DB::table('tenants')->count();
 
-            if (!isset($columns[$index]) || $columns[$index] === null) {
-                continue;
-            }
-
-            // ✅ Khusus created_at → date range dengan format "from|to"
-            if ((int) $index === 5) {
-                $parts = explode('|', $searchValue);
-                $from  = $parts[0] ?? '';
-                $to    = $parts[1] ?? '';
-
-                if (!empty($from)) {
-                    $query->whereDate('created_at', '>=', $from);
+            // Filter per kolom
+            $columnSearches = $request->input('columns', []);
+            foreach ($columnSearches as $index => $columnData) {
+                $searchValue = $columnData['search']['value'] ?? '';
+                if (empty($searchValue) && $searchValue !== '0') {
+                    continue;
                 }
-                if (!empty($to)) {
-                    $query->whereDate('created_at', '<=', $to);
+
+                if (!isset($columns[$index]) || $columns[$index] === null) {
+                    continue;
                 }
-                continue;
+
+                // Khusus created_at → date range
+                if ((int) $index === 5) {
+                    $parts = explode('|', $searchValue);
+                    $from  = $parts[0] ?? '';
+                    $to    = $parts[1] ?? '';
+
+                    if (!empty($from)) {
+                        // Parse ISO string dari frontend ke format datetime standar MySQL
+                        $fromFormatted = Carbon::parse($from)->setTimezone('UTC')->format('Y-m-d H:i:s');
+                        $query->where('tenants.created_at', '>=', $fromFormatted); // Sesuaikan 'tenants.created_at' jika ini tabel lain
+                    }
+
+                    if (!empty($to)) {
+                        // Parse ISO string dari frontend ke format datetime standar MySQL
+                        $toFormatted = Carbon::parse($to)->setTimezone('UTC')->format('Y-m-d H:i:s');
+                        $query->where('tenants.created_at', '<=', $toFormatted); // Sesuaikan 'tenants.created_at' jika ini tabel lain
+                    }
+                    continue;
+                }
+
+                // Khusus disabled (index 4)
+                if ((int) $index === 4) {
+                    $query->where('disabled', $searchValue);
+                    continue;
+                }
+
+                $query->where($columns[$index], 'like', "%{$searchValue}%");
             }
 
-            // ✅ Khusus disabled (index 4) → Menggunakan exact match '=' (bukan LIKE)
-            if ((int) $index === 4) {
-                $query->where('disabled', $searchValue);
-                continue;
-            }
+            $filteredRecords = $query->count();
 
-            // Kolom teks lain (name, subdomain, plan) → LIKE biasa
-            $query->where($columns[$index], 'like', "%{$searchValue}%");
-        }
+            // Ordering
+            $orderColumnIndex = (int) $request->input('order.0.column', 5);
+            $orderDir         = in_array(strtolower($request->input('order.0.dir', 'desc')), ['asc', 'desc'])
+                ? $request->input('order.0.dir', 'desc')
+                : 'desc';
+            $orderColumn      = $columns[$orderColumnIndex] ?? 'created_at';
 
-        $filteredRecords = $query->count();
+            $query->orderBy($orderColumn, $orderDir);
 
-        // Ordering
-        $orderColumnIndex = (int) $request->input('order.0.column', 5);
-        $orderDir         = in_array(strtolower($request->input('order.0.dir', 'desc')), ['asc', 'desc'])
-            ? $request->input('order.0.dir', 'desc')
-            : 'desc';
-        $orderColumn      = $columns[$orderColumnIndex] ?? 'created_at';
+            // Fetch data & formatting
+            $data = $query->skip($start)->take($length)->get()->map(function ($item) {
+                $item->created_at = Carbon::parse($item->created_at)->toIso8601String();
+                $item->updated_at = Carbon::parse($item->updated_at)->toIso8601String();
+                return $item;
+            });
 
-        $query->orderBy($orderColumn, $orderDir);
-
-        $data = $query->skip($start)->take($length)->get()->map(function ($item) {
-            $item->created_at = Carbon::parse($item->created_at)->toIso8601String();
-            $item->updated_at = Carbon::parse($item->updated_at)->toIso8601String();
-            return $item;
+            return [
+                'recordsTotal'    => $totalRecords,
+                'recordsFiltered' => $filteredRecords,
+                'data'            => $data,
+            ];
         });
 
+        // Kembalikan response JSON dengan menggabungkan nilai 'draw' yang dinamis
         return response()->json([
             'draw'            => intval($draw),
-            'recordsTotal'    => $totalRecords,
-            'recordsFiltered' => $filteredRecords,
-            'data'            => $data,
+            'recordsTotal'    => $response['recordsTotal'],
+            'recordsFiltered' => $response['recordsFiltered'],
+            'data'            => $response['data'],
         ]);
     }
 
@@ -101,7 +123,10 @@ class TenantController extends Controller
         $tenant = null;
 
         if ($id) {
-            $tenant = DB::table('tenants')->where('id', $id)->first();
+            // Caching detail form per ID selama 30 menit (di-clear saat update/toggle)
+            $tenant = Cache::remember("tenant_detail_{$id}", now()->addMinutes(30), function () use ($id) {
+                return DB::table('tenants')->where('id', $id)->first();
+            });
 
             if (!$tenant) {
                 abort(404);
@@ -128,6 +153,9 @@ class TenantController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // 3. ✅ CACHE BUSTER: Hancurkan seluruh cache pencarian & datatable tenant karena ada data baru
+        $this->clearTenantCache();
 
         return response()->json([
             'message' => 'Tenant berhasil ditambahkan'
@@ -157,6 +185,9 @@ class TenantController extends Controller
             'updated_at' => now(),
         ]);
 
+        // 3. ✅ CACHE BUSTER: Bersihkan cache spesifik ID dan cache global datatable
+        $this->clearTenantCache($id);
+
         return response()->json([
             'message' => 'Tenant berhasil diupdate'
         ]);
@@ -164,7 +195,6 @@ class TenantController extends Controller
 
     public function destroy($id)
     {
-        // 1. Cek apakah tenant tersebut benar-benar ada
         $tenant = DB::table('tenants')->where('id', $id)->first();
 
         if (!$tenant) {
@@ -174,18 +204,19 @@ class TenantController extends Controller
             ], 404);
         }
 
-        // 2. Cek apakah ID tenant ini sedang digunakan di tabel 'stores'
         $isUsedByStore = DB::table('stores')->where('tenant_id', $id)->exists();
 
         if ($isUsedByStore) {
             return response()->json([
                 'status'  => 'warning',
                 'message' => 'Tenant tidak bisa dihapus karena masih digunakan oleh data Toko!'
-            ], 422); // Kode 422 Unprocessable Entity cocok untuk validasi logika bisnis
+            ], 422);
         }
 
-        // 3. Jika aman, lakukan proses delete
         DB::table('tenants')->where('id', $id)->delete();
+
+        // 3. ✅ CACHE BUSTER: Bersihkan cache karena data dihapus
+        $this->clearTenantCache($id);
 
         return response()->json([
             'status'  => 'success',
@@ -205,18 +236,75 @@ class TenantController extends Controller
             ], 404);
         }
 
-        // 2. Balik nilai status disabled (0 jadi 1, 1 jadi 0)
+        // 2. Tentukan status baru (0 jadi 1, 1 jadi 0)
         $newStatus = $tenant->disabled ? 0 : 1;
         $statusText = $newStatus ? 'dinonaktifkan' : 'diaktifkan';
 
-        DB::table('tenants')->where('id', $id)->update([
-            'disabled'   => $newStatus,
-            'updated_at' => now(),
-        ]);
+        // 3. Gunakan Database Transaction agar perubahan di kedua tabel aman (All or Nothing)
+        DB::transaction(function () use ($id, $newStatus) {
+
+            // Update status Tenant utama
+            DB::table('tenants')->where('id', $id)->update([
+                'disabled'   => $newStatus,
+                'updated_at' => now(),
+            ]);
+
+            // ✅ SEKALIGUS UPDATE SEMUA STORES YANG MEMILIKI TENANT_ID TERKAIT
+            DB::table('stores')->where('tenant_id', $id)->update([
+                'disabled'   => $newStatus,
+                'updated_at' => now(),
+            ]);
+        });
+
+        // 4. ✅ CACHE BUSTER: Bersihkan cache terpusat
+        $this->clearTenantCache($id);
 
         return response()->json([
             'status'  => 'success',
-            'message' => "Tenant berhasil {$statusText}"
+            'message' => "Tenant beserta seluruh Toko di bawahnya berhasil {$statusText}"
         ]);
+    }
+
+    /**
+     * API Endpoint untuk Select2 Tenant dengan optimasi Cache Search.
+     */
+    public function searchTenant(Request $request)
+    {
+        $search = $request->input('q', '');
+
+        // Membuat cache key unik berdasarkan teks keyword yang diketik di Select2
+        $cacheKey = 'tenants_select2_' . md5($search);
+
+        $tenants = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($search) {
+            $query = DB::table('tenants')->where('disabled', 0);
+
+            if (!empty($search)) {
+                $query->where('name', 'like', "%{$search}%");
+            }
+
+            return $query->select('id', 'name')
+                ->take(15)
+                ->get();
+        });
+
+        return response()->json($tenants);
+    }
+
+    /**
+     * 4. ✅ FUNGSI PEMBANTU (HELPER) UNTUK MEMBERSIHKAN CACHE SECARA MASSAL
+     */
+    private function clearTenantCache($id = null)
+    {
+        // Jika driver cache kamu menggunakan 'redis' atau 'memcached', kita bisa pakai tags.
+        // Namun karena menggunakan default driver (file), kita buster via flush/forget pola kunci berikut:
+
+        if ($id) {
+            Cache::forget("tenant_detail_{$id}");
+        }
+
+        // Gunakan Cache::flush() jika ingin membersihkan seluruh cache aplikasi sekaligus,
+        // Namun jika hanya ingin menghapus cache hasil query ber-pola dinamis (md5), pastikan driver cache kamu mendukung.
+        // Jika menggunakan driver 'file' (default), disarankan langsung panggil Cache::flush() agar aman dan data mutakhir instan merata.
+        Cache::flush();
     }
 }
