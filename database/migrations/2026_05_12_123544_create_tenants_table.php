@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('subdomain')->nullable();
             $table->enum('plan', ['free', 'basic', 'pro'])->nullable();
-            $table->enum('status', ['active', 'inactive'])->nullable();
+            $table->tinyInteger('disabled')->default(0);
             $table->timestamps();
         });
     }

@@ -19,12 +19,13 @@ class TenantController extends Controller
         $start  = $request->input('start', 0);
         $length = $request->input('length', 10);
 
+        // 1. Ubah indeks ke-4 dari 'status' menjadi 'disabled' sesuai nama kolom database
         $columns = [
             0  => null, // No (row number)
             1  => 'name',
             2  => 'subdomain',
             3  => 'plan',
-            4  => 'status',
+            4  => 'disabled', // ✅ Diubah dari 'status' menjadi 'disabled'
             5  => 'created_at',
             6  => null, // Action
         ];
@@ -37,7 +38,11 @@ class TenantController extends Controller
         $columnSearches = $request->input('columns', []);
         foreach ($columnSearches as $index => $columnData) {
             $searchValue = $columnData['search']['value'] ?? '';
-            if (empty($searchValue) || !isset($columns[$index]) || $columns[$index] === null) {
+            if (empty($searchValue) && $searchValue !== '0') { // Pastikan angka '0' tidak dianggap empty
+                continue;
+            }
+
+            if (!isset($columns[$index]) || $columns[$index] === null) {
                 continue;
             }
 
@@ -56,7 +61,13 @@ class TenantController extends Controller
                 continue;
             }
 
-            // Kolom lain → LIKE biasa
+            // ✅ Khusus disabled (index 4) → Menggunakan exact match '=' (bukan LIKE)
+            if ((int) $index === 4) {
+                $query->where('disabled', $searchValue);
+                continue;
+            }
+
+            // Kolom teks lain (name, subdomain, plan) → LIKE biasa
             $query->where($columns[$index], 'like', "%{$searchValue}%");
         }
 
@@ -68,13 +79,12 @@ class TenantController extends Controller
             ? $request->input('order.0.dir', 'desc')
             : 'desc';
         $orderColumn      = $columns[$orderColumnIndex] ?? 'created_at';
+
         $query->orderBy($orderColumn, $orderDir);
 
         $data = $query->skip($start)->take($length)->get()->map(function ($item) {
-            $item->created_at = Carbon::parse($item->created_at)
-                ->toIso8601String();
-            $item->updated_at = Carbon::parse($item->updated_at)
-                ->toIso8601String();
+            $item->created_at = Carbon::parse($item->created_at)->toIso8601String();
+            $item->updated_at = Carbon::parse($item->updated_at)->toIso8601String();
             return $item;
         });
 
@@ -136,24 +146,77 @@ class TenantController extends Controller
 
         $data = $request->validate([
             'name' => 'required',
-            'subdomain' => 'required|unique:tenants,subdomain,' . $id,
-            'plan' => 'required'
         ], [
             'name.required' => 'Nama wajib diisi',
-            'subdomain.required' => 'Subdomain wajib diisi',
-            'subdomain.unique' => 'Subdomain sudah digunakan',
-            'plan.required' => 'Plan wajib diisi'
         ]);
 
         DB::table('tenants')->where('id', $id)->update([
             'name' => $data['name'],
-            'subdomain' => $data['subdomain'],
-            'plan' => $data['plan'],
+            'subdomain' => $request->input('subdomain'),
+            'plan' => $request->input('plan'),
             'updated_at' => now(),
         ]);
 
         return response()->json([
             'message' => 'Tenant berhasil diupdate'
+        ]);
+    }
+
+    public function destroy($id)
+    {
+        // 1. Cek apakah tenant tersebut benar-benar ada
+        $tenant = DB::table('tenants')->where('id', $id)->first();
+
+        if (!$tenant) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Data tenant tidak ditemukan'
+            ], 404);
+        }
+
+        // 2. Cek apakah ID tenant ini sedang digunakan di tabel 'stores'
+        $isUsedByStore = DB::table('stores')->where('tenant_id', $id)->exists();
+
+        if ($isUsedByStore) {
+            return response()->json([
+                'status'  => 'warning',
+                'message' => 'Tenant tidak bisa dihapus karena masih digunakan oleh data Toko!'
+            ], 422); // Kode 422 Unprocessable Entity cocok untuk validasi logika bisnis
+        }
+
+        // 3. Jika aman, lakukan proses delete
+        DB::table('tenants')->where('id', $id)->delete();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Tenant berhasil dihapus'
+        ]);
+    }
+
+    public function toggleStatus($id)
+    {
+        // 1. Cari data tenant
+        $tenant = DB::table('tenants')->where('id', $id)->first();
+
+        if (!$tenant) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Data tenant tidak ditemukan'
+            ], 404);
+        }
+
+        // 2. Balik nilai status disabled (0 jadi 1, 1 jadi 0)
+        $newStatus = $tenant->disabled ? 0 : 1;
+        $statusText = $newStatus ? 'dinonaktifkan' : 'diaktifkan';
+
+        DB::table('tenants')->where('id', $id)->update([
+            'disabled'   => $newStatus,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Tenant berhasil {$statusText}"
         ]);
     }
 }

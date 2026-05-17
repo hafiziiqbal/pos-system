@@ -28,6 +28,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/tenant/form/{id?}', [TenantController::class, 'form'])->name('tenant.form');
     Route::post('/tenant/store', [TenantController::class, 'store'])->name('tenant.store');
     Route::put('/tenant/update/{id}', [TenantController::class, 'update'])->name('tenant.update');
+    Route::delete('/tenant/{id}', [TenantController::class, 'destroy'])->name('tenant.destroy');
+    Route::patch('/tenant/{id}/toggle', [TenantController::class, 'toggleStatus'])->name('tenant.toggle');
 
     // STORE
     Route::get('/store', [StoreController::class, 'index'])->name('store');

@@ -12,6 +12,55 @@
     <style type="text/tailwindcss">
         @variant dark (&:where(.dark, .dark *));
     </style>
+    <style>
+        /* Sembunyikan elemen x-cloak bawaan Alpine */
+        [x-cloak] {
+            display: none !important;
+        }
+
+        /* Style Loading Screen HTML Murni */
+        #pure-preloader {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #ffffff;
+            /* Default Light Mode */
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+
+        /* Support Dark Mode Manual sebelum Tailwind Aktif */
+        html.dark #pure-preloader {
+            background-color: #0a0a0a;
+        }
+
+        /* Animasi Spinner Murni */
+        .pure-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #e5e5e5;
+            border-top-color: #2563eb;
+            /* Warna Biru */
+            border-radius: 50%;
+            animation: pure-spin 1s linear infinite;
+        }
+
+        @keyframes pure-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Class untuk menghilangkan preloader secara halus */
+        .preloader-hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+    </style>
     <script src="{{ asset('vendor/axios/axios.min.js') }}"></script>
     <script src="{{ asset('vendor/alpine/cdn.min.js') }}" defer></script>
     <script src="{{ asset('vendor/sweetalert/sweetalert2@11.map.js') }}" defer></script>
@@ -19,7 +68,15 @@
 
 <body>
 
-    <div x-data="{ showSidebar: window.innerWidth >= 768 }" class="relative flex w-full flex-col md:flex-row">
+    <!-- LOADING SCREEN (Murni HTML & CSS, Instan Muncul) -->
+    <div id="pure-preloader">
+        <div class="pure-spinner"></div>
+        <p style="margin-top: 16px; font-family: sans-serif; font-size: 14px; color: #737373; font-weight: 500;">
+            Memuat Sistem...
+        </p>
+    </div>
+
+    <div x-cloak x-data="{ showSidebar: window.innerWidth >= 768 }" class="relative flex w-full flex-col md:flex-row">
         <!-- This allows screen readers to skip the sidebar and go directly to the main content. -->
         <a class="sr-only" href="#main-content">skip to the main content</a>
 
@@ -31,23 +88,10 @@
             class="fixed left-0 z-20 flex h-svh w-60 shrink-0 flex-col border-r border-neutral-300 bg-neutral-50 p-4 transition-transform duration-300 md:w-64 dark:border-neutral-700 dark:bg-neutral-900"
             x-bind:class="showSidebar ? 'translate-x-0' : '-translate-x-full'" aria-label="sidebar navigation">
             <!-- logo  -->
-            <h1 class="text-3xl font-bold text-gray-800 tracking-tight">
+            <h1 class="text-3xl font-bold text-gray-800 tracking-tight mb-4">
                 POS <span class="text-blue-600">SYSTEM</span>
             </h1>
 
-            <!-- search  -->
-            <div class="relative my-4 flex w-full max-w-xs flex-col gap-1 text-neutral-600 dark:text-neutral-300">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none"
-                    stroke-width="2"
-                    class="absolute left-2 top-1/2 size-5 -translate-y-1/2 text-neutral-600/50 dark:text-neutral-300/50"
-                    aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                </svg>
-                <input type="search"
-                    class="w-full border border-neutral-300 rounded-sm bg-white px-2 py-1.5 pl-9 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-75 dark:border-neutral-700 dark:bg-neutral-950/50 dark:focus-visible:outline-white"
-                    name="search" aria-label="Search" placeholder="Search" />
-            </div>
 
             <!-- sidebar links  -->
             <div class="flex flex-col gap-2 overflow-y-auto pb-6">
@@ -170,24 +214,23 @@
 
         </nav>
 
-
-        <!-- toggle button for small screen  -->
-        {{-- <button
-            class="fixed right-4 top-4 z-20 rounded-full bg-black p-4 md:hidden text-neutral-100 dark:bg-white dark:text-black"
-            x-on:click="showSidebar = ! showSidebar">
-            <svg x-show="showSidebar" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
-                class="size-5" aria-hidden="true">
-                <path
-                    d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z" />
-            </svg>
-            <svg x-show="! showSidebar" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
-                class="size-5" aria-hidden="true">
-                <path
-                    d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm5-1v12h9a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2z" />
-            </svg>
-            <span class="sr-only">sidebar toggle</span>
-        </button> --}}
     </div>
+
+    <script>
+        // Menggunakan DOMContentLoaded agar preloader hilang begitu HTML & Alpine selesai inisialisasi awal
+        window.addEventListener('DOMContentLoaded', function() {
+            const preloader = document.getElementById('pure-preloader');
+            if (preloader) {
+                // Tambahkan class hidden untuk memicu efek fade-out CSS
+                preloader.classList.add('preloader-hidden');
+
+                // Hapus elemen dari DOM setelah animasi selesai agar tidak memberatkan memori
+                setTimeout(() => {
+                    preloader.remove();
+                }, 400);
+            }
+        });
+    </script>
 
     <script>
         function logout() {
