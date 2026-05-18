@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\StoreSettingController;
 use App\Http\Controllers\TenantController;
+use App\Http\Controllers\UserController;
 use App\Models\StoreSetting;
 use Illuminate\Support\Facades\Route;
 
@@ -42,6 +43,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/store/update/{id}', [StoreController::class, 'update'])->name('store.update');
     Route::delete('/store/{id}', [StoreController::class, 'destroy'])->name('store.destroy');
     Route::patch('/store/{id}/toggle', [StoreController::class, 'toggleStatus'])->name('store.toggle');
+    Route::get('/store/search', [StoreController::class, 'searchStore']);
 
     // STORE SETTING
     Route::get('/store/{store_id}/settings', [StoreSettingController::class, 'index'])->name('store.settings');
@@ -49,4 +51,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/store/{store_id}/settings/store', [StoreSettingController::class, 'store'])->name('store.settings.store');
     Route::put('/store/{store_id}/settings/{id}/update', [StoreSettingController::class, 'update'])->name('store.settings.update');
     Route::delete('/store/{store_id}/settings/{id}/destroy', [StoreSettingController::class, 'destroy'])->name('store.settings.destroy');
+
+    // USER
+    Route::get('/user', [UserController::class, 'index'])->name('user');
+    Route::get('/user/datatable', [UserController::class, 'getDatatable'])->name('user.datatable');
+    Route::get('/user/form/{id?}', [UserController::class, 'form'])->name('user.form');
+    Route::post('/user/store', [UserController::class, 'store'])->name('user.store');
+    Route::put('/user/update/{id}', [UserController::class, 'update'])->name('user.update');
+    Route::delete('/user/{id}', [UserController::class, 'destroy'])->name('user.destroy');
+    Route::patch('/user/{id}/toggle', [UserController::class, 'toggleStatus'])->name('user.toggle');
 });

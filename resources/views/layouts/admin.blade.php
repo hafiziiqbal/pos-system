@@ -120,6 +120,64 @@
                     <span>Support Us</span>
                 </a> --}}
 
+                {{-- USER & AKSES --}}
+                <div x-data="{ open: {{ request()->routeIs('user*', 'access*') ? 'true' : 'false' }} }" class="space-y-1">
+
+                    <!-- Parent Menu -->
+                    <button @click="open = !open"
+                        :class="open ? 'text-slate-900 bg-slate-50' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+                        class="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-md font-semibold transition-all duration-200 group">
+
+                        <div class="flex items-center gap-2">
+                            <!-- Icon Utama -->
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke-width="1.5" stroke="currentColor"
+                                class="w-4 h-4 text-slate-400 group-hover:text-slate-600">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                            </svg>
+
+                            <span>Pengguna & Akses</span>
+                        </div>
+
+                        <!-- Arrow Icon dengan Animasi Rotasi -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 transition-transform duration-300"
+                            :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+
+                    <!-- Child Menu (Submenu) -->
+                    <ul x-show="open" x-cloak x-collapse class="pl-7 space-y-1 border-l-2 border-slate-100 ml-5 mt-1">
+
+                        <!-- Menu Tenant -->
+                        <li>
+                            <a href="{{ route('user') }}" @class([
+                                'block px-3 py-1.5 text-sm rounded-md transition-colors',
+                                'font-bold text-slate-900 bg-slate-100 shadow-sm' => request()->routeIs(
+                                    'user*'),
+                                'text-slate-500 hover:text-slate-900 hover:bg-slate-50' => !request()->routeIs(
+                                    'user*'),
+                            ])>
+                                Pengguna
+                            </a>
+                        </li>
+
+                        <!-- Menu Toko -->
+                        <li>
+                            <a href="{{ route('store') }}" @class([
+                                'block px-3 py-1.5 text-sm rounded-md transition-colors',
+                                'font-bold text-slate-900 bg-slate-100 shadow-sm' => request()->routeIs(
+                                    'store*'),
+                                'text-slate-500 hover:text-slate-900 hover:bg-slate-50' => !request()->routeIs(
+                                    'store*'),
+                            ])>
+                                Akses
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
                 {{-- TENANT & TOKO --}}
                 <div x-data="{ open: {{ request()->routeIs('tenant*', 'store*') ? 'true' : 'false' }} }" class="space-y-1">
 

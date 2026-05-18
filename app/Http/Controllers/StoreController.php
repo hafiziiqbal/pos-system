@@ -259,6 +259,7 @@ class StoreController extends Controller
     {
         $store = DB::table('stores')->where('id', $id)->first();
 
+        // 1. Cek apakah toko ada
         if (!$store) {
             return response()->json([
                 'status'  => 'error',
@@ -266,14 +267,20 @@ class StoreController extends Controller
             ], 404);
         }
 
-        // Lakukan Pengecekan Relasi Lain Jika Ada (misal: apakah toko ini punya data transaksi/user kasir?)
-        // Contoh (hanya jika ada tabel users/kasir terkait toko ini):
-        // $isUsedByUser = DB::table('users')->where('store_id', $id)->exists();
-        // if ($isUsedByUser) { return response()->json([...], 422); }
+        // 2. Cek apakah ada user yang masih terhubung dengan toko ini (memiliki store_id yang sama)
+        $isUsedByUser = DB::table('users')->where('store_id', $id)->exists();
 
+        if ($isUsedByUser) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Toko tidak dapat dihapus karena masih ada user yang terhubung dengan toko ini.'
+            ], 422); // 422 Unprocessable Entity cocok untuk validasi logika bisnis seperti ini
+        }
+
+        // 3. Jika aman, hapus toko
         DB::table('stores')->where('id', $id)->delete();
 
-        // ✅ Bersihkan cache karena data dihapus
+        // 4. Bersihkan cache karena data dihapus
         $this->clearStoreCache($id);
 
         return response()->json([
@@ -323,6 +330,44 @@ class StoreController extends Controller
             'message' => "Toko berhasil {$statusText}"
         ]);
     }
+
+    /**
+     * API Endpoint untuk Select2 Tenant dengan optimasi Cache Search.
+     */
+    public function searchStore(Request $request)
+    {
+        $search   = $request->input('q', '');
+        $tenantId = $request->input('tenant_id', ''); // 1. Tangkap tenant_id dari request
+
+        // 2. Tambahkan tenant_id ke dalam pembentukan Hash md5 agar cachenya tidak tertukar
+        // antara pencarian tanpa tenant vs pencarian dengan tenant tertentu.
+        $cacheKey = 'stores_select2_' . md5($search . '_' . $tenantId);
+
+        $stores = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($search, $tenantId) {
+            $query = DB::table('stores')->where('disabled', 0);
+
+            // 3. Jika ada parameter tenant_id, filter tokonya
+            if (!empty($tenantId)) {
+                $query->where('tenant_id', $tenantId);
+            }
+
+            if (!empty($search)) {
+                // 4. Bungkus dalam function agar pencarian OR tidak merusak Where 'disabled' dan 'tenant_id'
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('branch_code', 'like', "%{$search}%"); // Bisa dicari pakai kode cabang juga
+                });
+            }
+
+            // 5. Pastikan 'branch_code' di-select karena dibutuhkan oleh Select2 di frontend
+            return $query->select('id', 'name', 'branch_code')
+                ->take(15)
+                ->get();
+        });
+
+        return response()->json($stores);
+    }
+
 
     /**
      * ✅ HELPER UNTUK MEMBERSIHKAN CACHE STORES SECARA TOTAL
